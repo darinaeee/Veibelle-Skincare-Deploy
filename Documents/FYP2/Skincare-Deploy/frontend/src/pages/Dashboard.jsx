@@ -1,6 +1,7 @@
 // src/pages/Dashboard.jsx
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { getRecommendations } from "../api/recommendationAPI"; // ✅ use shared API function
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -9,36 +10,34 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
 
+  // --- Load saved quiz data ---
   useEffect(() => {
     const savedQuiz = localStorage.getItem("quizData");
     if (savedQuiz) setQuizData(JSON.parse(savedQuiz));
     else navigate("/quiz");
   }, [navigate]);
 
+  // --- Fetch recommendations when quizData is ready ---
   useEffect(() => {
     if (!quizData) return;
 
     const fetchRecs = async () => {
       setLoading(true);
       setErr(null);
-      try {
-        const params = new URLSearchParams();
-        if (quizData.skinType) params.append("skin_type", quizData.skinType);
-        if (quizData.productType) params.append("product_type", quizData.productType);
-        if (quizData.concerns?.length) params.append("concerns", quizData.concerns.join(","));
-        if (quizData.allergens?.length) params.append("allergens_list", quizData.allergens.join(","));
-        if (quizData.pregnancySafe) params.append("pregnancy_safe", quizData.pregnancySafe);
-        
-        // src/pages/Dashboard.jsx
-const API_BASE = "https://veibelle-backend.up.railway.app";
-        const resp = await fetch(`http://127.0.0.1:8000/recommend?${params.toString()}`);
-        if (!resp.ok) throw new Error(await resp.text());
 
-        const data = await resp.json();
+      try {
+        const data = await getRecommendations({
+          skin_type: quizData.skinType,
+          product_type: quizData.productType,
+          concerns: quizData.concerns?.join(","),
+          allergens_list: quizData.allergens?.join(","),
+          pregnancy_safe: quizData.pregnancySafe,
+        });
+
         setRecs(Array.isArray(data.results) ? data.results : []);
       } catch (e) {
-        console.error("Failed to fetch recommendations", e);
-        setErr("Failed to fetch recommendations. Is the backend running?");
+        console.error("❌ Failed to fetch recommendations:", e);
+        setErr("Failed to fetch recommendations. Please try again later.");
       } finally {
         setLoading(false);
       }
@@ -55,14 +54,14 @@ const API_BASE = "https://veibelle-backend.up.railway.app";
     );
   }
 
+  // --- Recommended Product Card Component ---
   const RecommendedProductCard = ({ p }) => (
     <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-md hover:shadow-lg transition duration-300 flex flex-col">
       <h4 className="font-bold text-lg text-black">{p.name}</h4>
       {p.brand && <p className="text-sm text-gray-500 mb-2">{p.brand}</p>}
-      {p.rank && <p className="text-xs text-gray-400 mb-1">⭐ Rank {p.rank}</p>}
-      {p.ingredients && (
-        <p className="text-xs text-gray-600 mt-2">
-          <strong>Key Ingredients:</strong> {p.ingredients.split(",").slice(0, 5).join(", ")}...
+      {p.similarity && (
+        <p className="text-xs text-gray-400 mb-1">
+          🔍 Match Score: {(p.similarity * 100).toFixed(1)}%
         </p>
       )}
     </div>
@@ -72,7 +71,9 @@ const API_BASE = "https://veibelle-backend.up.railway.app";
     <div className="w-full max-w-5xl mx-auto space-y-8 p-6 mt-8">
       {/* Header */}
       <header className="flex justify-between items-center border-b pb-4">
-        <h2 className="text-3xl font-extrabold text-black">Your Personalized Dashboard</h2>
+        <h2 className="text-3xl font-extrabold text-black">
+          Your Personalized Dashboard
+        </h2>
       </header>
 
       {/* Profile Summary */}
@@ -86,29 +87,39 @@ const API_BASE = "https://veibelle-backend.up.railway.app";
 
           <div className="p-4 bg-gray-50 rounded-lg border-l-4 border-gray-300">
             <p className="text-sm text-gray-500">Main Concerns</p>
-            <p className="text-lg font-bold">{quizData.concerns?.join(", ") || "N/A"}</p>
+            <p className="text-lg font-bold">
+              {quizData.concerns?.join(", ") || "N/A"}
+            </p>
           </div>
 
           <div className="p-4 bg-gray-50 rounded-lg border-l-4 border-gray-300">
             <p className="text-sm text-gray-500">Product Type</p>
-            <p className="text-lg font-bold">{quizData.productType || "N/A"}</p>
+            <p className="text-lg font-bold">
+              {quizData.productType || "N/A"}
+            </p>
           </div>
 
           <div className="p-4 bg-gray-50 rounded-lg border-l-4 border-black">
             <p className="text-sm text-black">Allergens to Avoid</p>
             <p className="text-lg font-bold">
-              {quizData.allergens?.length ? quizData.allergens.join(", ") : "None"}
+              {quizData.allergens?.length
+                ? quizData.allergens.join(", ")
+                : "None"}
             </p>
           </div>
 
           <div className="p-4 bg-gray-50 rounded-lg border-l-4 border-gray-300">
             <p className="text-sm text-gray-500">Eye Area Concerns</p>
-            <p className="text-lg font-bold">{quizData.eyeConcerns?.join(", ") || "None"}</p>
+            <p className="text-lg font-bold">
+              {quizData.eyeConcerns?.join(", ") || "None"}
+            </p>
           </div>
 
           <div className="p-4 bg-gray-50 rounded-lg border-l-4 border-gray-300">
             <p className="text-sm text-gray-500">Pregnancy / Nursing</p>
-            <p className="text-lg font-bold">{quizData.pregnancy || "No"}</p>
+            <p className="text-lg font-bold">
+              {quizData.pregnancySafe || "No"}
+            </p>
           </div>
         </div>
       </div>
@@ -129,7 +140,11 @@ const API_BASE = "https://veibelle-backend.up.railway.app";
           {recs && recs.length ? (
             recs.map((p, i) => <RecommendedProductCard key={i} p={p} />)
           ) : (
-            !loading && <div className="text-gray-500">No matches found for your filters.</div>
+            !loading && (
+              <div className="text-gray-500">
+                No matches found for your filters.
+              </div>
+            )
           )}
         </div>
       </div>
